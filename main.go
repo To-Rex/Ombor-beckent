@@ -104,7 +104,7 @@ func main() {
 	router.POST("/updatePassword", updatePassword)
 	router.POST("/updateBlockedStatus", updateBlockedStatus)
 	router.POST("/resendVerificationCode", resendVerificationCode)
-	router.Run(":8080")
+	router.Run()
 }
 
 func createToken(username string) string {
@@ -268,18 +268,19 @@ func login(c *gin.Context) {
 	if err != nil {
 		fmt.Println(err)
 	}
-	if user.Email == "" {
-		c.JSON(http.StatusNotFound, gin.H{"status": http.StatusNotFound, "message": "User not found"})
+	if !user.Verified {
+		c.JSON(http.StatusForbidden, gin.H{"status": http.StatusForbidden, "message": "User not verified"})
 		return
 	}
 	if user.Blocked {
 		c.JSON(http.StatusForbidden, gin.H{"status": http.StatusForbidden, "message": "User blocked"})
 		return
 	}
-	if !user.Verified {
-		c.JSON(http.StatusForbidden, gin.H{"status": http.StatusForbidden, "message": "User not verified"})
+	if user.Email == "" {
+		c.JSON(http.StatusNotFound, gin.H{"status": http.StatusNotFound, "message": "User not found"})
 		return
 	}
+	
 	err = bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(login.Password))
 	if err != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"status": http.StatusUnauthorized, "message": "Invalid credentials"})
