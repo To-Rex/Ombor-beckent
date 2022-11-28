@@ -23,7 +23,6 @@ const uri = "mongodb+srv://root:0000@cluster0.kncismv.mongodb.net/?retryWrites=t
 type User struct {
 	Name         string `json:"name"`
 	Surname      string `json:"surname"`
-	Years        int    `json:"years"`
 	Phone        string `json:"phone"`
 	Country      string `json:"country"`
 	Email        string `json:"email"`
@@ -218,7 +217,6 @@ func register(c *gin.Context) {
 	user = User{
 		Name:         register.Name,
 		Surname:      register.Surname,
-		Years:        register.Years,
 		Phone:        register.Phone,
 		Country:      register.Country,
 		Email:        register.Email,
