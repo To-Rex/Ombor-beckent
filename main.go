@@ -84,8 +84,8 @@ func main() {
 	router.POST("/register", register)
 	router.POST("/login", login)
 	router.POST("/verifyUser", verifyUser)
-	router.POST("/getAllUsers", getAllUsers)
-	router.POST("/getUser", getUser)
+	router.GET("/getAllUsers", getAllUsers)
+	router.GET("/getUser", getUser)
 	router.POST("/updatePassword", updatePassword)
 	router.POST("/updateBlockedStatus", updateBlockedStatus)
 	router.POST("/resendVerificationCode", resendVerificationCode)
@@ -916,3 +916,4 @@ func getProductsByCategory(c *gin.Context) {
 	}
 	c.JSON(http.StatusOK, gin.H{"status": http.StatusOK, "data": productsByCategory})
 }
+
