@@ -48,7 +48,6 @@ type Product struct {
 	ProductName string `json:"product_name"`
 	ProductDesc string `json:"product_desc"`
 	ProductImg  string `json:"product_img"`
-	ProductCat  string `json:"product_cat"`
 	ProductCatId string `json:"product_cat_id"`
 	ProductPrice string `json:"product_price"`
 	ProductStock string `json:"product_stock"`
@@ -91,7 +90,10 @@ func main() {
 	router.POST("/updateBlockedStatus", updateBlockedStatus)
 	router.POST("/resendVerificationCode", resendVerificationCode)
 	router.POST("/addProductCategory", addProductCategory)
-	
+	router.POST("/addProduct", addProduct)
+	router.GET("/getAllProductCategories", getAllProductCategories)
+	router.GET("/getAllProducts", getAllProducts)
+	router.GET("/getProductsByCategory", getProductsByCategory)
 	router.Run()
 }
 
@@ -633,3 +635,284 @@ func addProductCategory(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"status": http.StatusOK, "message": "Product category added"})
 }
 
+func addProduct(c *gin.Context) {
+	token := c.Request.Header.Get("Authorization")
+	token = token[7:]
+	claims := jwt.MapClaims{}
+	_, err := jwt.ParseWithClaims(token, claims, func(token *jwt.Token) (interface{}, error) {
+		return []byte(os.Getenv("SECRET")), nil
+	})
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid token"})
+		return
+	}
+	client, err := mongo.NewClient(options.Client().ApplyURI(uri))
+	if err != nil {
+		fmt.Println(err)
+	}
+	ctx, nx := context.WithTimeout(context.Background(), 10*time.Second)
+	err = client.Connect(ctx)
+	if err != nil {
+		fmt.Println(err)
+	}
+	if nx != nil {
+		fmt.Println(nx)
+	}
+	defer client.Disconnect(ctx)
+	err = client.Ping(ctx, readpref.Primary())
+	if err != nil {
+		fmt.Println(err)
+	}
+	collection := client.Database("Partners").Collection("users")
+	var product Product
+	c.BindJSON(&product)
+	filter := bson.M{"email": claims["email"]}
+	var result User
+	err = collection.FindOne(ctx, filter ).Decode(&result)
+	if err != nil {
+		fmt.Println(err)
+	}
+	if result.Email == "" {
+		c.JSON(http.StatusNotFound, gin.H{"status": http.StatusNotFound, "message": "User not found"})
+		return
+	}
+	if result.Blocked {
+		c.JSON(http.StatusForbidden, gin.H{"status": http.StatusForbidden, "message": "User blocked"})
+		return
+	}
+	if !result.Verified {
+		c.JSON(http.StatusForbidden, gin.H{"status": http.StatusForbidden, "message": "User not verified"})
+		return
+	}
+	if result.UserRole != "creator" {
+		c.JSON(http.StatusForbidden, gin.H{"status": http.StatusForbidden, "message": "User is not creator"})
+		return
+	}
+
+	product.ProductId = generateUserId()
+	product.ProductDate = time.Now().Format("2006-01-02 15:04:05")
+	product.ProductSeller = result.UserId
+
+	collection = client.Database("Partners").Collection("Products")
+	_, err = collection.InsertOne(ctx, product)
+	if err != nil {
+		fmt.Println(err)
+	}
+	c.JSON(http.StatusOK, gin.H{"status": http.StatusOK, "message": "Product added"})
+}
+
+func getAllProductCategories(c *gin.Context) {
+	token := c.Request.Header.Get("Authorization")
+	token = token[7:]
+	claims := jwt.MapClaims{}
+	_, err := jwt.ParseWithClaims(token, claims, func(token *jwt.Token) (interface{}, error) {
+		return []byte(os.Getenv("SECRET")), nil
+	} )
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid token"})
+		return
+	}
+	client, err := mongo.NewClient(options.Client().ApplyURI(uri))
+	if err != nil {
+		fmt.Println(err)
+	}
+	ctx, nx := context.WithTimeout(context.Background(), 10*time.Second)
+	err = client.Connect(ctx)
+	if err != nil {
+		fmt.Println(err)
+	}
+	if nx != nil {
+		fmt.Println(nx)
+	}
+	defer client.Disconnect(ctx)
+	err = client.Ping(ctx, readpref.Primary())
+	if err != nil {
+		fmt.Println(err)
+	}
+	collection := client.Database("Partners").Collection("users")
+	filter := bson.M{"email": claims["email"]}
+	var result User
+	err = collection.FindOne(ctx, filter ).Decode(&result)
+	if err != nil {
+		fmt.Println(err)
+	}
+	if result.Email == "" {
+		c.JSON(http.StatusNotFound, gin.H{"status": http.StatusNotFound, "message": "User not found"})
+		return
+	}
+	if result.Blocked {
+		c.JSON(http.StatusForbidden, gin.H{"status": http.StatusForbidden, "message": "User blocked"})
+		return
+	}
+	if !result.Verified {
+		c.JSON(http.StatusForbidden, gin.H{"status": http.StatusForbidden, "message": "User not verified"})
+		return
+	}
+	if result.UserRole != "creator" {
+		c.JSON(http.StatusForbidden, gin.H{"status": http.StatusForbidden, "message": "User is not creator"})
+		return
+	}
+	collection = client.Database("Partners").Collection("Categories")
+	var productCategories []ProductCategory
+	cur, err := collection.Find(ctx, bson.M{})
+	if err != nil {
+		fmt.Println(err)
+	}
+	for cur.Next(ctx) {
+		var productCategory ProductCategory
+		err := cur.Decode(&productCategory)
+		if err != nil {
+			fmt.Println(err)
+		}
+		productCategories = append(productCategories, productCategory)
+	}
+	if err := cur.Err(); err != nil {
+		fmt.Println(err)
+	}
+	cur.Close(ctx)
+	c.JSON(http.StatusOK, gin.H{"status": http.StatusOK, "message": "Product categories", "data": productCategories})
+}
+
+func getAllProducts(c *gin.Context) {
+	token := c.Request.Header.Get("Authorization")
+	token = token[7:]
+	claims := jwt.MapClaims{}
+	_, err := jwt.ParseWithClaims(token, claims, func(token *jwt.Token) (interface{}, error) {
+		return []byte(os.Getenv("SECRET")), nil
+	} )
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid token"})
+		return
+	}
+	client, err := mongo.NewClient(options.Client().ApplyURI(uri))
+	if err != nil {
+		fmt.Println(err)
+	}
+	ctx, nx := context.WithTimeout(context.Background(), 10*time.Second)
+	err = client.Connect(ctx)
+	if err != nil {
+		fmt.Println(err)
+	}
+	if nx != nil {
+		fmt.Println(nx)
+	}
+	defer client.Disconnect(ctx)
+	err = client.Ping(ctx, readpref.Primary())
+	if err != nil {
+		fmt.Println(err)
+	}
+	collection := client.Database("Partners").Collection("users")
+	filter := bson.M{"email": claims["email"]}
+	var result User
+	err = collection.FindOne(ctx, filter ).Decode(&result)
+	if err != nil {
+		fmt.Println(err)
+	}
+	if result.Email == "" {
+		c.JSON(http.StatusNotFound, gin.H{"status": http.StatusNotFound, "message": "User not found"})
+		return
+	}
+	if result.Blocked {
+		c.JSON(http.StatusForbidden, gin.H{"status": http.StatusForbidden, "message": "User blocked"})
+		return
+	}
+	if !result.Verified {
+		c.JSON(http.StatusForbidden, gin.H{"status": http.StatusForbidden, "message": "User not verified"})
+		return
+	}
+
+	collection = client.Database("Partners").Collection("Products")
+	var products []Product
+	cur, err := collection.Find(ctx, bson.M{})
+	if err != nil {
+		fmt.Println(err)
+	}
+	for cur.Next(ctx) {
+		var product Product
+		err := cur.Decode(&product)
+		if err != nil {
+			fmt.Println(err)
+		}
+		products = append(products, product)
+	}
+	if err := cur.Err(); err != nil {
+		fmt.Println(err)
+	}
+	cur.Close(ctx)
+	c.JSON(http.StatusOK, gin.H{"status": http.StatusOK, "message": "Products", "data": products})
+}
+
+//if Products in productcatid == query param productcatid, return products in that category	
+func getProductsByCategory(c *gin.Context) {
+	token := c.Request.Header.Get("Authorization")
+	token = token[7:]
+	claims := jwt.MapClaims{}
+	_, err := jwt.ParseWithClaims(token, claims, func(token *jwt.Token) (interface{}, error) {
+		return []byte(os.Getenv("SECRET")), nil
+	} )
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid token"})
+		return
+	}
+	client, err := mongo.NewClient(options.Client().ApplyURI(uri))
+	if err != nil {
+		fmt.Println(err)
+	}
+	ctx, nx := context.WithTimeout(context.Background(), 10*time.Second)
+	err = client.Connect(ctx)
+	if err != nil {
+		fmt.Println(err)
+	}
+	if nx != nil {
+		fmt.Println(nx)
+	}
+	defer client.Disconnect(ctx)
+	err = client.Ping(ctx, readpref.Primary())
+	if err != nil {
+		fmt.Println(err)
+	}
+	collection := client.Database("Partners").Collection("users")
+	filter := bson.M{"email": claims["email"]}
+	var result User
+	err = collection.FindOne(ctx, filter ).Decode(&result)
+	if err != nil {
+		fmt.Println(err)
+	}
+	if result.Email == "" {
+		c.JSON(http.StatusNotFound, gin.H{"status": http.StatusNotFound, "message": "User not found"})
+		return
+	}
+	if result.Blocked {
+		c.JSON(http.StatusForbidden, gin.H{"status": http.StatusForbidden, "message": "User blocked"})
+		return
+	}
+	if !result.Verified {
+		c.JSON(http.StatusForbidden, gin.H{"status": http.StatusForbidden, "message": "User not verified"})
+		return
+	}
+	collection = client.Database("Partners").Collection("Products")
+	var products []Product
+	cur, err := collection.Find(ctx, bson.M{})
+	if err != nil {
+		fmt.Println(err)
+	}
+	for cur.Next(ctx) {
+		var product Product
+		err := cur.Decode(&product)
+		if err != nil {
+			fmt.Println(err)
+		}
+		products = append(products, product)
+	}
+	if err := cur.Err(); err != nil {
+		fmt.Println(err)
+	}
+	cur.Close(ctx)
+	var productsByCategory []Product
+	for _, product := range products {
+		if product.ProductCatId == c.Query("categoryId") {
+			productsByCategory = append(productsByCategory, product)
+		}
+	}
+	c.JSON(http.StatusOK, gin.H{"status": http.StatusOK, "data": productsByCategory})
+}
