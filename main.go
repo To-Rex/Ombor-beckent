@@ -37,38 +37,25 @@ type User struct {
 	UserAvatar   string `json:"user_avatar"`
 }
 
-type Transaction struct {
-	TransactionId          string `json:"transaction_id"`
-	TransactionDate        string `json:"transaction_date"`
-	TransactionType        string `json:"transaction_type"`
-	TransactionAmount      int    `json:"transaction_amount"`
-	TransactionStatus      string `json:"transaction_status"`
-	TransactionCurrency    string `json:"transaction_currency"`
-	TransactionDescription string `json:"transaction_description"`
-	TransactionUserId      string `json:"transaction_user_id"`
+type ProductCategory struct {
+	CategoryName string `json:"category_name"`
+	CategoryId   string `json:"category_id"`
+	CategoryIcon string `json:"category_icon"`
 }
 
 type Product struct {
-	ProductId          string `json:"product_id"`
-	ProductName        string `json:"product_name"`
-	ProductDescription string `json:"product_description"`
-	ProductPrice       int    `json:"product_price"`
-	ProductCurrency    string `json:"product_currency"`
-	ProductImage       string `json:"product_image"`
-	ProductCategory    string `json:"product_category"`
-	ProductStatus      string `json:"product_status"`
-	ProductUserId      string `json:"product_user_id"`
-}
-
-type Order struct {
-	OrderId              string `json:"order_id"`
-	OrderDate            string `json:"order_date"`
-	OrderStatus          string `json:"order_status"`
-	OrderUserId          string `json:"order_user_id"`
-	OrderProductId       string `json:"order_product_id"`
-	OrderProductAmount   int    `json:"order_product_amount"`
-	OrderProductPrice    int    `json:"order_product_price"`
-	OrderProductCurrency string `json:"order_product_currency"`
+	ProductId   string `json:"product_id"`
+	ProductName string `json:"product_name"`
+	ProductDesc string `json:"product_desc"`
+	ProductImg  string `json:"product_img"`
+	ProductCat  string `json:"product_cat"`
+	ProductCatId string `json:"product_cat_id"`
+	ProductPrice string `json:"product_price"`
+	ProductStock string `json:"product_stock"`
+	ProductStatus string `json:"product_status"`
+	ProductDate string `json:"product_date"`
+	ProductSeller string `json:"product_seller"`
+	ProductNumber string `json:"product_number"`
 }
 
 type Login struct {
@@ -135,17 +122,7 @@ func generateUserId() string {
 	return string(b)
 }
 
-// generate wallet random cheracter 32 length string for user
-func generateWallet() string {
-	rand.Seed(time.Now().UnixNano())
-	chars := []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")
-	length := 32
-	b := make([]rune, length)
-	for i := range b {
-		b[i] = chars[rand.Intn(len(chars))]
-	}
-	return string(b)
-}
+
 
 func randomCode() string {
 	//random int code 6	length number
