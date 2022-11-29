@@ -90,6 +90,7 @@ func main() {
 	router.POST("/updatePassword", updatePassword)
 	router.POST("/updateBlockedStatus", updateBlockedStatus)
 	router.POST("/resendVerificationCode", resendVerificationCode)
+	router.POST("/addProductCategory", addProductCategory)
 	router.Run()
 }
 
@@ -557,3 +558,74 @@ func updateBlockedStatus(c *gin.Context) {
 	// if user blocked true return user blocked status true else return false
 	c.JSON(http.StatusOK, gin.H{"status": http.StatusOK, "message": "User blocked status updated", "blocked": user.Blocked})
 }
+
+func addProductCategory(c *gin.Context) {
+	token := c.Request.Header.Get("Authorization")
+	token = token[7:]
+	claims := jwt.MapClaims{}
+	_, err := jwt.ParseWithClaims(token, claims, func(token *jwt.Token) (interface{}, error) {
+		return []byte(os.Getenv("SECRET")), nil
+	})
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid token"})
+		return
+	}
+	client, err := mongo.NewClient(options.Client().ApplyURI(uri))
+	if err != nil {
+		fmt.Println(err)
+	}
+	ctx, nx := context.WithTimeout(context.Background(), 10*time.Second)
+	err = client.Connect(ctx)
+	if err != nil {
+		fmt.Println(err)
+	}
+	if nx != nil {
+		fmt.Println(nx)
+	}
+	defer client.Disconnect(ctx)
+	err = client.Ping(ctx, readpref.Primary())
+	if err != nil {
+		fmt.Println(err)
+	}
+	collection := client.Database("Partners").Collection("users")
+	var productCategory ProductCategory
+	c.BindJSON(&productCategory)
+	filter := bson.M{"email": claims["email"]}
+	var result User
+	err = collection.FindOne(ctx, filter).Decode(&result)
+	if err != nil {
+		fmt.Println(err)
+	}
+	if result.Email == "" {
+		c.JSON(http.StatusNotFound, gin.H{"status": http.StatusNotFound, "message": "User not found"})
+		return
+	}
+	if result.Blocked {
+		c.JSON(http.StatusForbidden, gin.H{"status": http.StatusForbidden, "message": "User blocked"})
+		return
+	}
+	if !result.Verified {
+		c.JSON(http.StatusForbidden, gin.H{"status": http.StatusForbidden, "message": "User not verified"})
+		return
+	}
+	if result.UserRole != "creator" {
+		c.JSON(http.StatusForbidden, gin.H{"status": http.StatusForbidden, "message": "User is not creator"})
+		return
+	}
+	collection = client.Database("Partners").Collection("Catageries")
+	filter = bson.M{"name": productCategory.CategoryName}
+	err = collection.FindOne(ctx, filter).Decode(&result)
+	if err != nil {
+		fmt.Println(err)
+	}
+	if result.Email != "" {
+		c.JSON(http.StatusConflict, gin.H{"status": http.StatusConflict, "message": "Product category already exists"})
+		return
+	}
+	_, err = collection.InsertOne(ctx, productCategory)
+	if err != nil {
+		fmt.Println(err)
+	}
+	c.JSON(http.StatusOK, gin.H{"status": http.StatusOK, "message": "Product category added"})
+}
+
