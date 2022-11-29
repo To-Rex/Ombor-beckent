@@ -91,6 +91,7 @@ func main() {
 	router.POST("/updateBlockedStatus", updateBlockedStatus)
 	router.POST("/resendVerificationCode", resendVerificationCode)
 	router.POST("/addProductCategory", addProductCategory)
+	
 	router.Run()
 }
 
@@ -123,7 +124,16 @@ func generateUserId() string {
 	return string(b)
 }
 
-
+func generateid() string {
+	rand.Seed(time.Now().UnixNano())
+	chars := []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")
+	length := 32
+	b := make([]rune, length)
+	for i := range b {
+		b[i] = chars[rand.Intn(len(chars))]
+	}
+	return string(b)
+}
 
 func randomCode() string {
 	//random int code 6	length number
@@ -592,7 +602,7 @@ func addProductCategory(c *gin.Context) {
 	c.BindJSON(&productCategory)
 	filter := bson.M{"email": claims["email"]}
 	var result User
-	err = collection.FindOne(ctx, filter).Decode(&result)
+	err = collection.FindOne(ctx, filter ).Decode(&result)
 	if err != nil {
 		fmt.Println(err)
 	}
@@ -612,16 +622,10 @@ func addProductCategory(c *gin.Context) {
 		c.JSON(http.StatusForbidden, gin.H{"status": http.StatusForbidden, "message": "User is not creator"})
 		return
 	}
-	collection = client.Database("Partners").Collection("Catageries")
-	filter = bson.M{"name": productCategory.CategoryName}
-	err = collection.FindOne(ctx, filter).Decode(&result)
-	if err != nil {
-		fmt.Println(err)
-	}
-	if result.Email != "" {
-		c.JSON(http.StatusConflict, gin.H{"status": http.StatusConflict, "message": "Product category already exists"})
-		return
-	}
+	//categoryid generateid() function call here
+	productCategory.CategoryId = generateUserId()
+
+	collection = client.Database("Partners").Collection("Categories")
 	_, err = collection.InsertOne(ctx, productCategory)
 	if err != nil {
 		fmt.Println(err)
