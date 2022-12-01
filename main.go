@@ -94,6 +94,8 @@ func main() {
 	router.GET("/getAllProductCategories", getAllProductCategories)
 	router.GET("/getAllProducts", getAllProducts)
 	router.GET("/getProductsByCategory", getProductsByCategory)
+	router.DELETE("/deleteCategory", deleteCategory)
+	router.DELETE("/deleteProduct", deleteProduct)
 	router.Run()
 }
 
@@ -126,16 +128,6 @@ func generateUserId() string {
 	return string(b)
 }
 
-func generateid() string {
-	rand.Seed(time.Now().UnixNano())
-	chars := []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")
-	length := 32
-	b := make([]rune, length)
-	for i := range b {
-		b[i] = chars[rand.Intn(len(chars))]
-	}
-	return string(b)
-}
 
 func randomCode() string {
 	//random int code 6	length number
@@ -917,3 +909,147 @@ func getProductsByCategory(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"status": http.StatusOK, "data": productsByCategory})
 }
 
+func deleteCategory(c *gin.Context) {
+	token := c.Request.Header.Get("Authorization")
+	token = token[7:]
+	claims := jwt.MapClaims{}
+	_, err := jwt.ParseWithClaims(token, claims, func(token *jwt.Token) (interface{}, error) {
+		return []byte(os.Getenv("SECRET")), nil
+	} )
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid token"})
+		return
+	}
+	client, err := mongo.NewClient(options.Client().ApplyURI(uri))
+	if err != nil {
+		fmt.Println(err)
+	}
+	ctx, nx := context.WithTimeout(context.Background(), 10*time.Second)
+	err = client.Connect(ctx)
+	if err != nil {
+		fmt.Println(err)
+	}
+	if nx != nil {
+		fmt.Println(nx)
+	}
+	defer client.Disconnect(ctx)
+	err = client.Ping(ctx, readpref.Primary())
+	if err != nil {
+		fmt.Println(err)
+	}
+	collection := client.Database("Partners").Collection("users")
+	filter := bson.M{"email": claims["email"]}
+	var result User
+	err = collection.FindOne(ctx, filter ).Decode(&result)
+	if err != nil {
+		fmt.Println(err)
+	}
+	if result.Email == "" {
+		c.JSON(http.StatusNotFound, gin.H{"status": http.StatusNotFound, "message": "User not found"})
+		return
+	}
+	if result.Blocked {
+		c.JSON(http.StatusForbidden, gin.H{"status": http.StatusForbidden, "message": "User blocked"})
+		return
+	}
+	if !result.Verified {
+		c.JSON(http.StatusForbidden, gin.H{"status": http.StatusForbidden, "message": "User not verified"})
+		return
+	}
+	var category ProductCategory
+	err = c.BindJSON(&category)
+	if err != nil {
+		fmt.Println(err)
+	}
+	collection = client.Database("Partners").Collection("Categories")
+	filter = bson.M{"categoryid": c.Query("categoryId")}
+	_, err = collection.DeleteOne(ctx, filter )
+	if err != nil {
+		fmt.Println(err)
+	}
+
+	var products []Product
+	collection = client.Database("Partners").Collection("Products")
+	cur, err := collection.Find(ctx, bson.M{})
+	if err != nil {
+		fmt.Println(err)
+	}
+	for cur.Next(ctx) {
+		var product Product
+		err := cur.Decode(&product)
+		if err != nil {
+			fmt.Println(err)
+		}
+		products = append(products, product)
+	}
+	if err := cur.Err(); err != nil {
+		fmt.Println(err)
+	}
+	cur.Close(ctx)
+	for _, product := range products {
+		if product.ProductCatId == c.Query("categoryId") {
+			filter = bson.M{"productid": product.ProductId}
+			_, err = collection.DeleteOne(ctx, filter )
+			if err != nil {
+				fmt.Println(err)
+			}
+		}
+	}
+	c.JSON(http.StatusOK, gin.H{"status": http.StatusOK, "message": "Category deleted successfully"})
+}
+
+func deleteProduct(c *gin.Context) {
+	token := c.Request.Header.Get("Authorization")
+	token = token[7:]
+	claims := jwt.MapClaims{}
+	_, err := jwt.ParseWithClaims(token, claims, func(token *jwt.Token) (interface{}, error) {
+		return []byte(os.Getenv("SECRET")), nil
+	} )
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid token"})
+		return
+	}
+	client, err := mongo.NewClient(options.Client().ApplyURI(uri))
+	if err != nil {
+		fmt.Println(err)
+	}
+	ctx, nx := context.WithTimeout(context.Background(), 10*time.Second)
+	err = client.Connect(ctx)
+	if err != nil {
+		fmt.Println(err)
+	}
+	if nx != nil {
+		fmt.Println(nx)
+	}
+	defer client.Disconnect(ctx)
+	err = client.Ping(ctx, readpref.Primary())
+	if err != nil {
+		fmt.Println(err)
+	}
+	collection := client.Database("Partners").Collection("users")
+	filter := bson.M{"email": claims["email"]}
+	var result User
+	err = collection.FindOne(ctx, filter ).Decode(&result)
+	if err != nil {
+		fmt.Println(err)
+	}
+	if result.Email == "" {
+		c.JSON(http.StatusNotFound, gin.H{"status": http.StatusNotFound, "message": "User not found"})
+		return
+	}
+	if result.Blocked {
+		c.JSON(http.StatusForbidden, gin.H{"status": http.StatusForbidden, "message": "User blocked"})
+		return
+	}
+	if !result.Verified {
+		c.JSON(http.StatusForbidden, gin.H{"status": http.StatusForbidden, "message": "User not verified"})
+		return
+	}
+	collection = client.Database("Partners").Collection("Products")
+	filter = bson.M{"productid": c.Query("productId")}
+	_, err = collection.DeleteOne(ctx, filter )
+	if err != nil {
+		fmt.Println(err)
+	}
+	c.JSON(http.StatusOK, gin.H{"status": http.StatusOK, "message": "Product deleted successfully"})
+}
