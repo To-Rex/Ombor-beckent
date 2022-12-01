@@ -6,6 +6,7 @@ import (
 	"math/rand"
 	"net/http"
 	"os"
+	"strconv"
 	"time"
 
 	"github.com/dgrijalva/jwt-go"
@@ -54,7 +55,7 @@ type Product struct {
 	ProductStatus string `json:"product_status"`
 	ProductDate string `json:"product_date"`
 	ProductSeller string `json:"product_seller"`
-	ProductNumber string `json:"product_number"`
+	ProductNumber int64 `json:"product_number"`
 }
 
 type Login struct {
@@ -96,6 +97,8 @@ func main() {
 	router.GET("/getProductsByCategory", getProductsByCategory)
 	router.DELETE("/deleteCategory", deleteCategory)
 	router.DELETE("/deleteProduct", deleteProduct)
+	router.POST("/productSell", productSell)
+	router.POST("/addProductSell", addProductSell)
 	router.Run()
 }
 
@@ -1052,4 +1055,167 @@ func deleteProduct(c *gin.Context) {
 		fmt.Println(err)
 	}
 	c.JSON(http.StatusOK, gin.H{"status": http.StatusOK, "message": "Product deleted successfully"})
+}
+
+func productSell(c *gin.Context) {
+	token := c.Request.Header.Get("Authorization")
+	token = token[7:]
+	claims := jwt.MapClaims{}
+	_, err := jwt.ParseWithClaims(token, claims, func(token *jwt.Token) (interface{}, error) {
+		return []byte(os.Getenv("SECRET")), nil
+	})
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid token"})
+		return
+	}
+	client, err := mongo.NewClient(options.Client().ApplyURI(uri))
+	if err != nil {
+		fmt.Println(err)
+	}
+	ctx, nx := context.WithTimeout(context.Background(), 10*time.Second)
+	err = client.Connect(ctx)
+	if err != nil {
+		fmt.Println(err)
+	}
+	if nx != nil {
+		fmt.Println(nx)
+	}
+	defer client.Disconnect(ctx)
+	err = client.Ping(ctx, readpref.Primary())
+	if err != nil {
+		fmt.Println(err)
+	}
+	collection := client.Database("Partners").Collection("users")
+	filter := bson.M{"email": claims["email"]}
+	var result User
+	err = collection.FindOne(ctx, filter).Decode(&result)
+	if err != nil {
+		fmt.Println(err)
+	}
+	if result.Email == "" {
+		c.JSON(http.StatusNotFound, gin.H{"status": http.StatusNotFound, "message": "User not found"})
+		return
+	}
+	if result.Blocked {
+		c.JSON(http.StatusForbidden, gin.H{"status": http.StatusForbidden, "message": "User blocked"})
+		return
+	}
+	if !result.Verified {
+		c.JSON(http.StatusForbidden, gin.H{"status": http.StatusForbidden, "message": "User not verified"})
+		return
+	}
+	collection = client.Database("Partners").Collection("Products")
+	filter = bson.M{"productid": c.Query("productId")}
+	number, err := strconv.Atoi(c.Query("number"))
+	if err != nil {
+		fmt.Println(err)
+	}
+	fmt.Println(filter)
+	var product Product
+	err = collection.FindOne(ctx, filter ).Decode(&product)
+	fmt.Println(product)
+	if err != nil {
+		fmt.Println(err)
+	}
+	if product.ProductId == "" {
+		c.JSON(http.StatusNotFound, gin.H{"status": http.StatusNotFound, "message": "Product not found"})
+		return
+	}
+	if product.ProductSeller != result.UserId {
+		c.JSON(http.StatusForbidden, gin.H{"status": http.StatusForbidden, "message": "User not authorized"})
+		return
+	}
+	if int(product.ProductNumber) < number { 
+		c.JSON(http.StatusForbidden, gin.H{"status": http.StatusForbidden, "message": "Not enough products"})
+		return
+	}
+	product.ProductNumber = product.ProductNumber - int64(number)
+	update := bson.M{"$set": bson.M{"productnumber": product.ProductNumber}}
+	_, err = collection.UpdateOne(ctx, filter , update)
+	if err != nil {
+		fmt.Println(err)
+	}
+	c.JSON(http.StatusOK, gin.H{"status": http.StatusOK, "message": "Product sold successfully"})
+}
+
+func addProductSell(c *gin.Context) {
+	token := c.Request.Header.Get("Authorization")
+	token = token[7:]
+	claims := jwt.MapClaims{}
+	_, err := jwt.ParseWithClaims(token, claims, func(token *jwt.Token) (interface{}, error) {
+		return []byte(os.Getenv("SECRET")), nil
+	})
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid token"})
+		return
+	}
+	client, err := mongo.NewClient(options.Client().ApplyURI(uri))
+	if err != nil {
+		fmt.Println(err)
+	}
+	ctx, nx := context.WithTimeout(context.Background(), 10*time.Second)
+	err = client.Connect(ctx)
+	if err != nil {
+		fmt.Println(err)
+	}
+	if nx != nil {
+		fmt.Println(nx)
+	}
+	defer client.Disconnect(ctx)
+	err = client.Ping(ctx, readpref.Primary())
+	if err != nil {
+		fmt.Println(err)
+	}
+	collection := client.Database("Partners").Collection("users")
+	filter := bson.M{"email": claims["email"]}
+	var result User
+	err = collection.FindOne(ctx, filter).Decode(&result)
+	if err != nil {
+		fmt.Println(err)
+	}
+	if result.Email == "" {
+		c.JSON(http.StatusNotFound, gin.H{"status": http.StatusNotFound, "message": "User not found"})
+		return
+	}
+	if result.Blocked {
+		c.JSON(http.StatusForbidden, gin.H{"status": http.StatusForbidden, "message": "User blocked"})
+		return
+	}
+	if !result.Verified {
+		c.JSON(http.StatusForbidden, gin.H{"status": http.StatusForbidden, "message": "User not verified"})
+		return
+	}
+	collection = client.Database("Partners").Collection("Products")
+	filter = bson.M{"productid": c.Query("productId")}
+	number, err := strconv.Atoi(c.Query("number"))
+	if err != nil {
+		fmt.Println(err)
+	}
+	fmt.Println(filter)
+	var product Product
+	err = collection.FindOne(ctx, filter ).Decode(&product)
+	fmt.Println(product)
+	if err != nil {
+		fmt.Println(err)
+	}
+	if product.ProductId == "" {
+		c.JSON(http.StatusNotFound, gin.H{"status": http.StatusNotFound, "message": "Product not found"})
+		return
+	}
+	if product.ProductSeller != result.UserId {
+		c.JSON(http.StatusForbidden, gin.H{"status": http.StatusForbidden, "message": "User not authorized"})
+		return
+	}
+	if 0 > number { 
+		c.JSON(http.StatusForbidden, gin.H{"status": http.StatusForbidden, "message": "Not enough products"})
+		return
+	}
+	
+	product.ProductNumber = product.ProductNumber + int64(number)
+	update := bson.M{"$set": bson.M{"productnumber": product.ProductNumber}}
+	_, err = collection.UpdateOne(ctx, filter , update)
+	if err != nil {
+		fmt.Println(err)
+	}
+	c.JSON(http.StatusOK, gin.H{"status": http.StatusOK, "message": "Product added successfully"})
 }
