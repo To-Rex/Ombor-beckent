@@ -99,6 +99,7 @@ func main() {
 	router.DELETE("/deleteProduct", deleteProduct)
 	router.POST("/productSell", productSell)
 	router.POST("/addProductSell", addProductSell)
+	
 	router.Run()
 }
 
@@ -1220,3 +1221,4 @@ func addProductSell(c *gin.Context) {
 	}
 	c.JSON(http.StatusOK, gin.H{"status": http.StatusOK, "message": "Product added successfully"})
 }
+
