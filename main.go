@@ -50,7 +50,7 @@ type Product struct {
 	ProductDesc string `json:"product_desc"`
 	ProductImg  string `json:"product_img"`
 	ProductCatId string `json:"product_cat_id"`
-	ProductPrice string `json:"product_price"`
+	ProductPrice int64 `json:"product_price"`
 	ProductStock string `json:"product_stock"`
 	ProductStatus string `json:"product_status"`
 	ProductDate string `json:"product_date"`
@@ -248,8 +248,13 @@ func login(c *gin.Context) {
 	collection := client.Database("Partners").Collection("users")
 	var user User
 	err = collection.FindOne(ctx, bson.M{"email": login.Email}).Decode(&user)
+	fmt.Println(user)
 	if err != nil {
 		fmt.Println(err)
+	}
+	if user.Email == "" {
+		c.JSON(http.StatusNotFound, gin.H{"status": http.StatusNotFound, "message": "User not found"})
+		return
 	}
 	if !user.Verified {
 		c.JSON(http.StatusForbidden, gin.H{"status": http.StatusForbidden, "message": "User not verified"})
@@ -259,11 +264,7 @@ func login(c *gin.Context) {
 		c.JSON(http.StatusForbidden, gin.H{"status": http.StatusForbidden, "message": "User blocked"})
 		return
 	}
-	if user.Email == "" {
-		c.JSON(http.StatusNotFound, gin.H{"status": http.StatusNotFound, "message": "User not found"})
-		return
-	}
-	
+
 	err = bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(login.Password))
 	if err != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"status": http.StatusUnauthorized, "message": "Invalid credentials"})
