@@ -58,6 +58,12 @@ type Product struct {
 	ProductNumber int64 `json:"product_number"`
 }
 
+type Money struct {
+	UserId string `json:"user_id"`
+	Money int64 `json:"money"`
+	MoneyDate string `json:"money_date"`
+	MoneyId string `json:"money_id"`
+}
 type Login struct {
 	Email    string `json:"email"`
 	Password string `json:"password"`
@@ -99,7 +105,7 @@ func main() {
 	router.DELETE("/deleteProduct", deleteProduct)
 	router.POST("/productSell", productSell)
 	router.POST("/addProductSell", addProductSell)
-	
+
 	router.Run()
 }
 
@@ -1137,8 +1143,31 @@ func productSell(c *gin.Context) {
 	if err != nil {
 		fmt.Println(err)
 	}
+
+	var money Money
+	collection = client.Database("Partners").Collection("Money")
+	filter = bson.M{"userid": result.UserId}
+	err = collection.FindOne(ctx, filter ).Decode(&money)
+	if err != nil {
+		fmt.Println(err)
+	}
+	if money.UserId == "" {
+		c.JSON(http.StatusNotFound, gin.H{"status": http.StatusNotFound, "message": "Money not found"})
+		return
+	}
+	money.Money = money.Money + int64(number)*product.ProductPrice
+	money.MoneyDate = time.Now().Format("2006-01-02")
+	money.MoneyId = generateUserId()
+	money.UserId = result.UserId
+
+	update = bson.M{"$set": bson.M{"money": money.Money}}
+	_, err = collection.UpdateOne(ctx, filter , update)
+	if err != nil {
+		fmt.Println(err)
+	}
 	c.JSON(http.StatusOK, gin.H{"status": http.StatusOK, "message": "Product sold successfully"})
 }
+
 
 func addProductSell(c *gin.Context) {
 	token := c.Request.Header.Get("Authorization")
